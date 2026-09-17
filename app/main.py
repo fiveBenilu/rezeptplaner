@@ -1,16 +1,20 @@
 """Rezeptplaner: FastAPI-Backend mit SQLite und statischem Vanilla-JS-Frontend."""
 import datetime as dt
 import json
+import os
 import sqlite3
+import subprocess
+import sys
+import threading
 from contextlib import closing
 from pathlib import Path
 
-from fastapi import Body, FastAPI, HTTPException
+from fastapi import BackgroundTasks, Body, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import ai_client, shopping
+from . import ai_client, images, shopping
 
 ROOT = Path(__file__).resolve().parent.parent
 DB_PATH = ROOT / "data" / "rezeptplaner.db"
@@ -88,7 +92,36 @@ def row_to_recipe(row) -> dict:
     for f in ("ingredients", "steps", "tags"):
         r[f] = json.loads(r[f])
     r["favorite"] = bool(r.get("favorite"))
+    path = image_path(r["id"])
+    r["image"] = int(path.stat().st_mtime) if path.exists() else None  # Version als Cache-Buster fürs Frontend
     return r
+
+
+def image_path(recipe_id: int) -> Path:
+    return images.IMAGES / f"{recipe_id}.webp"
+
+
+_image_lock = threading.Lock()  # ponytail: global lock = max. ein Modell im RAM; Warteschlange reicht fürs Homelab
+
+
+def generate_images(ids: list[int]):
+    """Hintergrund-Task: Bilder im Subprozess erzeugen. Fehler (fehlendes Modell, OOM, Timeout) nur loggen."""
+    if not ids or os.environ.get("IMAGE_THREADS") == "0":  # nichts zu tun / Bildgenerierung abgeschaltet
+        return
+    with _image_lock:
+        with closing(db()) as conn:
+            jobs = [{"id": r["id"], "title": r["title"], "cuisine": r["cuisine"]} for r in conn.execute(
+                f"SELECT id, title, cuisine FROM recipes WHERE id IN ({', '.join('?' * len(ids))})", ids)]
+        if not jobs:
+            return
+        try:
+            # nice: Media-Server & Co. haben Vorrang. Timeout großzügig inkl. Erst-Download (~2,6 GB).
+            res = subprocess.run(["nice", "-n", "15", sys.executable, "-m", "app.images", json.dumps(jobs)],
+                                 cwd=ROOT, capture_output=True, text=True, timeout=900 + 60 * len(jobs))
+            if res.returncode:
+                print(f"Bildgenerierung fehlgeschlagen (Exit {res.returncode}): {res.stderr[-2000:]}", file=sys.stderr)
+        except Exception as e:
+            print(f"Bildgenerierung fehlgeschlagen: {e}", file=sys.stderr)
 
 
 def get_recipe(conn, recipe_id: int) -> dict:
@@ -131,6 +164,23 @@ def recipe_detail(recipe_id: int):
 def delete_recipe(recipe_id: int):
     with closing(db()) as conn, conn:
         conn.execute("DELETE FROM recipes WHERE id = ?", (recipe_id,))
+    image_path(recipe_id).unlink(missing_ok=True)
+    return {"ok": True}
+
+
+@app.get("/api/recipes/{recipe_id}/image")
+def recipe_image(recipe_id: int):
+    path = image_path(recipe_id)
+    if not path.exists():
+        raise HTTPException(404, "Kein Bild vorhanden")
+    return FileResponse(path, media_type="image/webp")
+
+
+@app.post("/api/recipes/{recipe_id}/image")
+def request_image(recipe_id: int, background: BackgroundTasks):
+    with closing(db()) as conn:
+        get_recipe(conn, recipe_id)
+    background.add_task(generate_images, [recipe_id])
     return {"ok": True}
 
 
@@ -166,8 +216,9 @@ async def generate_and_store(prefs: dict) -> list[int]:
 
 
 @app.post("/api/recipes/generate")
-async def generate(req: GenerateRequest):
+async def generate(req: GenerateRequest, background: BackgroundTasks):
     ids = await generate_and_store(req.model_dump())
+    background.add_task(generate_images, ids)
     with closing(db()) as conn:
         return [get_recipe(conn, i) for i in ids]
 
@@ -245,8 +296,9 @@ class AutoPlanRequest(BaseModel):
 
 
 @app.post("/api/plan/auto-generate")
-async def auto_plan(req: AutoPlanRequest):
+async def auto_plan(req: AutoPlanRequest, background: BackgroundTasks):
     ids = await generate_and_store(req.model_dump())
+    background.add_task(generate_images, ids)
     with closing(db()) as conn, conn:
         week = current_week(conn)
         conn.executemany("INSERT OR REPLACE INTO weekly_plan (week_start, recipe_id, multiplier) VALUES (?, ?, 1)",

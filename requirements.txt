@@ -1,2 +1,7 @@
 fastapi==0.141.1
 uvicorn==0.49.0
+# Titelbilder (torch CPU-Variante wird im Dockerfile separat installiert)
+diffusers==0.40.0
+transformers==5.17.0
+safetensors==0.8.0
+pillow==12.3.0

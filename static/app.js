@@ -74,6 +74,24 @@ function iconFor(r) {
   return icon(match ? match[1] : "utensils");
 }
 
+// Titelbild, falls vorhanden; das Icon liegt immer darunter und bleibt bei Ladefehlern sichtbar (kein Layout-Sprung).
+const cover = (r) => `${iconFor(r)}${r.image ? `<img src="/api/recipes/${r.id}/image?v=${r.image}" alt="" loading="lazy" onerror="this.remove()">` : ""}`;
+
+// Bilder entstehen nach der Antwort im Hintergrund (~2-5 s pro Bild): kurz nachpollen und die aktive Ansicht neu zeichnen.
+function watchImages(ids, tries = 30) {
+  setTimeout(async () => {
+    try {
+      const fresh = await api("/api/recipes");
+      const pending = ids.filter((id) => fresh.some((r) => r.id === id && !r.image));
+      if (pending.length < ids.length) {
+        const tab = location.hash.slice(1);
+        if (tab === "recipes") { recipes = fresh; renderRecipes(); } else if (tab === "plan") loadPlan();
+      }
+      if (pending.length && tries > 1) watchImages(pending, tries - 1);
+    } catch { /* ponytail: Poll-Fehler ignorieren, nächster Tab-Wechsel lädt ohnehin neu */ }
+  }, 10000);
+}
+
 const fmtNum = (n) => (n == null ? "" : Number(n).toLocaleString("de-DE", { maximumFractionDigits: 2 }));
 const fmtAmount = (amount, unit) => (amount == null ? (unit ? unit : "nach Bedarf") : `${fmtNum(amount)} ${unit || ""}`.trim());
 const totalTime = (r) => (r.prep_time_min || 0) + (r.cook_time_min || 0);
@@ -141,7 +159,7 @@ function renderRecipes() {
     <article class="card recipe" data-id="${r.id}" tabindex="0">
       ${favButton(r, "fav")}
       ${r.planned ? `<span class="badge" title="Eingeplant">${icon("check")}</span>` : ""}
-      <div class="thumb">${iconFor(r)}</div>
+      <div class="thumb">${cover(r)}</div>
       <div class="body">
         <h3>${esc(r.title)}</h3>
         <div class="meta">${icon("clock", "inline")} ${totalTime(r)} Min · ${r.servings} Port.</div>
@@ -212,6 +230,7 @@ $("#gen-form").addEventListener("submit", async (e) => {
     status.textContent = `${created.length} neue Rezepte hinzugefügt.`;
     $("#gen").open = false;
     await loadRecipes();
+    watchImages(created.map((r) => r.id));
   } catch (err) {
     status.className = "hint error";
     status.textContent = err.message;
@@ -242,7 +261,7 @@ async function openDetail(id) {
         <button class="close" aria-label="Schließen">${icon("close")}</button>
       </div>
       <div class="sheet">
-        <div class="hero">${iconFor(r)}</div>
+        <div class="hero ${r.image ? "has-image" : ""}">${cover(r)}</div>
         <h2>${esc(r.title)}</h2>
         <p class="meta">${esc(r.cuisine)} · ${icon("clock", "inline")} ${r.prep_time_min} Min Vorbereitung + ${r.cook_time_min} Min Kochen · ${r.servings} Portionen</p>
         ${hasNutrition(r) ? `<p class="nutrition">${icon("flame", "inline")} ≈ ${r.calories_kcal} kcal · ${r.protein_g} g Protein pro Portion <span>(geschätzt)</span></p>` : ""}
@@ -257,7 +276,10 @@ async function openDetail(id) {
         </ul>
         <h3>Zubereitung</h3>
         <ol class="steps">${r.steps.map((s) => `<li><span>${esc(s)}</span></li>`).join("")}</ol>
-        <div class="actions"><button class="link-danger">Rezept löschen</button></div>
+        <div class="actions">
+          <button class="btn image-gen"><span class="btn-icon">${icon("sparkles")}</span>${r.image ? "Bild neu generieren" : "Bild generieren"}</button>
+          <button class="link-danger">Rezept löschen</button>
+        </div>
       </div>`;
     dlg.querySelector(".close").onclick = () => dlg.close();
     dlg.querySelector(".fav-toggle").onclick = () => setFavorite(id, !r.favorite, (v) => { r.favorite = v; if (!editing) render(); });
@@ -270,6 +292,14 @@ async function openDetail(id) {
         render();
         loadRecipes();
       } catch (e) { toast(e.message); }
+    };
+    dlg.querySelector(".image-gen").onclick = async (e) => {
+      try {
+        await api(`/api/recipes/${id}/image`, { method: "POST" });
+        e.target.closest("button").disabled = true;
+        toast("Bild wird im Hintergrund erzeugt.");
+        watchImages([id]);
+      } catch (err) { toast(err.message); }
     };
     dlg.querySelector(".link-danger").onclick = async () => {
       if (!confirm(`„${r.title}" wirklich löschen?`)) return;
@@ -397,7 +427,7 @@ async function loadPlan() {
   }
   list.innerHTML = plan.items.map(({ recipe: r, multiplier: m }) => `
     <div class="card plan-item" data-id="${r.id}" data-m="${m}">
-      <div class="emoji">${iconFor(r)}</div>
+      <div class="emoji">${cover(r)}</div>
       <div class="info">
         <h3>${esc(r.title)}</h3>
         <div class="meta">${icon("clock", "inline")} ${totalTime(r)} Min · ${fmtNum(r.servings * m)} Portionen${hasNutrition(r) ? ` · ≈ ${r.calories_kcal} kcal/Port.` : ""}</div>
@@ -450,6 +480,7 @@ $("#auto-form").addEventListener("submit", async (e) => {
     e.target.reset();
     toast(`${plan.items.length} Gerichte eingeplant.`);
     await loadPlan();
+    watchImages(plan.items.map((i) => i.recipe.id));
   } catch (err) {
     status.className = "hint error";
     status.textContent = err.message;

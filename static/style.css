@@ -242,6 +242,14 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .ico-svg { width: 1em; height: 1em; vertical-align: -0.15em; }
 .ico-svg.inline { width: .9em; height: .9em; vertical-align: -0.1em; }
 .recipe .thumb .ico-svg, .empty .big .ico-svg, .sheet .hero .ico-svg, .plan-item .emoji .ico-svg { width: 40px; height: 40px; }
+
+/* Titelbilder: liegen über dem Icon-Platzhalter, Box-Größe hängt nie vom Bild ab */
+.recipe .thumb, .sheet .hero, .plan-item .emoji { position: relative; overflow: hidden; }
+.recipe .thumb img, .sheet .hero img, .plan-item .emoji img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.recipe .thumb { height: 120px; }
+.plan-item .emoji { height: 44px; flex: none; display: grid; place-items: center; border-radius: 10px; }
+.sheet .hero.has-image { aspect-ratio: 16 / 9; max-height: 300px; margin: 0 -20px 12px; display: grid; place-items: center; background: var(--accent-soft); }
+
 .empty .big .ico-svg, .sheet .hero .ico-svg { width: 48px; height: 48px; }
 .badge .ico-svg { width: 16px; height: 16px; }
 .close .ico-svg { width: 18px; height: 18px; }
