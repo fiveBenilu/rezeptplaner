@@ -1,0 +1,16 @@
+services:
+  rezeptplaner:
+    build: .
+    container_name: rezeptplaner
+    restart: unless-stopped
+    ports:
+      - "8010:8010"
+    # Gleiche UID/GID wie der Host-User, dem ~/.claude gehört (sonst keine Leserechte auf die Credentials).
+    user: "${UID:-1000}:${GID:-1000}"
+    volumes:
+      - ./data:/app/data
+      # claude CLI vom Host (native Binary; Symlink wird von Docker beim Start aufgelöst)
+      - ${HOME}/.local/bin/claude:/usr/local/bin/claude:ro
+      # OAuth-Credentials + Config. Nicht read-only: die CLI schreibt dort Token-Refreshes/State.
+      - ${HOME}/.claude:/home/app/.claude
+      - ${HOME}/.claude.json:/home/app/.claude.json
