@@ -25,7 +25,7 @@
     <!-- Tab: Rezepte -->
     <section id="tab-recipes" class="tab active">
       <details class="card gen" id="gen">
-        <summary><span>✨ Neue Rezeptideen generieren</span></summary>
+        <summary><span class="gen-summary-icon" aria-hidden="true"></span><span>Neue Rezeptideen generieren</span></summary>
         <form id="gen-form">
           <label>Küche / Stil
             <input name="cuisine" placeholder="z.B. italienisch, asiatisch">
@@ -77,9 +77,9 @@
   </main>
 
   <nav class="tabbar">
-    <button data-tab="recipes" class="active"><span class="ico">📖</span>Rezepte</button>
-    <button data-tab="plan"><span class="ico">🗓️</span>Wochenplan</button>
-    <button data-tab="shopping"><span class="ico">🛒</span>Einkaufsliste</button>
+    <button data-tab="recipes" class="active"><span class="ico ico-book" aria-hidden="true"></span>Rezepte</button>
+    <button data-tab="plan"><span class="ico ico-calendar" aria-hidden="true"></span>Wochenplan</button>
+    <button data-tab="shopping"><span class="ico ico-cart" aria-hidden="true"></span>Einkaufsliste</button>
   </nav>
 
   <!-- Detailansicht als Sheet -->
