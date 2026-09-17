@@ -57,6 +57,11 @@ def init_db():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with closing(db()) as conn, conn:
         conn.executescript(SCHEMA_SQL)
+        # Migration für Alt-Datenbanken: Nährwert-Spalten (nullable) nachrüsten.
+        cols = {row["name"] for row in conn.execute("PRAGMA table_info(recipes)")}
+        for col in ("calories_kcal", "protein_g"):
+            if col not in cols:
+                conn.execute(f"ALTER TABLE recipes ADD COLUMN {col} INTEGER")
 
 
 def current_week(conn) -> str:
@@ -150,10 +155,10 @@ async def generate(req: GenerateRequest):
         for r in recipes:
             cur = conn.execute(
                 "INSERT INTO recipes (title, description, cuisine, servings, prep_time_min, cook_time_min, "
-                "ingredients, steps, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "ingredients, steps, tags, calories_kcal, protein_g) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (r["title"], r["description"], r["cuisine"], r["servings"], r["prep_time_min"], r["cook_time_min"],
                  json.dumps(r["ingredients"], ensure_ascii=False), json.dumps(r["steps"], ensure_ascii=False),
-                 json.dumps(r["tags"], ensure_ascii=False)))
+                 json.dumps(r["tags"], ensure_ascii=False), r.get("calories_kcal"), r.get("protein_g")))
             ids.append(cur.lastrowid)
         return [get_recipe(conn, i) for i in ids]
 

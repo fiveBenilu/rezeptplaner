@@ -27,6 +27,7 @@ const ICON_PATHS = {
   bread: '<path d="M4 16c0-4 3.5-8 8-8s8 4 8 8"/><path d="M4 16h16"/><line x1="8" y1="16" x2="8" y2="12.5"/><line x1="12" y1="16" x2="12" y2="11.5"/><line x1="16" y1="16" x2="16" y2="12.5"/>',
   salad: '<path d="M4 13h16a8 8 0 0 1-16 0Z"/><path d="M7 13c0-2 1-4 2.5-5M12 13c0-2.6 1-5 2-6.5M16 13c.3-1.6 1-3 2-4"/>',
   fish: '<path d="M3 12c3-3 7-4 10-4 3 3 5 3 8 1-1 2-1 4 0 6-3-2-5-2-8 1-3 0-7-1-10-4Z"/><circle cx="7.5" cy="11" r=".7" fill="currentColor" stroke="none"/>',
+  flame: '<path d="M12 21c-3.9 0-6.5-2.6-6.5-6.2 0-3.3 2.3-5.3 3.6-7.6.3 1.6 1 2.7 2.1 3.3C11 7.3 12.3 4.8 14.5 3c.2 3 3.9 5.6 3.9 11.2 0 4-2.6 6.8-6.4 6.8Z"/><path d="M12 21c-1.6 0-2.6-1.1-2.6-2.6 0-1.6 1.3-2.4 2.1-3.9.9 1 3.1 2.2 3.1 4 0 1.5-1.1 2.5-2.6 2.5Z"/>',
   soup: '<path d="M4 13h16a8 8 0 0 1-16 0Z"/><path d="M8 9c0-1.3.8-1.3.8-2.6M12 9c0-1.3.8-1.3.8-2.6M16 9c0-1.3.8-1.3.8-2.6"/>',
 };
 function icon(name, cls = "") {
@@ -73,6 +74,8 @@ function iconFor(r) {
 const fmtNum = (n) => (n == null ? "" : Number(n).toLocaleString("de-DE", { maximumFractionDigits: 2 }));
 const fmtAmount = (amount, unit) => (amount == null ? (unit ? unit : "nach Bedarf") : `${fmtNum(amount)} ${unit || ""}`.trim());
 const totalTime = (r) => (r.prep_time_min || 0) + (r.cook_time_min || 0);
+// KI-Schätzung pro Portion; Alt-Rezepte haben keine Werte -> nichts anzeigen.
+const hasNutrition = (r) => r.calories_kcal != null && r.protein_g != null;
 
 // ---------- Tabs ----------
 const TITLES = { recipes: "Rezepte", plan: "Wochenplan", shopping: "Einkaufsliste" };
@@ -105,6 +108,7 @@ async function loadRecipes() {
       <div class="body">
         <h3>${esc(r.title)}</h3>
         <div class="meta">${icon("clock", "inline")} ${totalTime(r)} Min · ${r.servings} Port.</div>
+        ${hasNutrition(r) ? `<div class="meta">${icon("flame", "inline")} ~${r.calories_kcal} kcal · ${r.protein_g}g Protein</div>` : ""}
         <div class="tags">${r.tags.slice(0, 3).map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
       </div>
     </article>`).join("");
@@ -163,6 +167,7 @@ async function openDetail(id) {
         <div class="hero">${iconFor(r)}</div>
         <h2>${esc(r.title)}</h2>
         <p class="meta">${esc(r.cuisine)} · ${icon("clock", "inline")} ${r.prep_time_min} Min Vorbereitung + ${r.cook_time_min} Min Kochen · ${r.servings} Portionen</p>
+        ${hasNutrition(r) ? `<p class="nutrition">${icon("flame", "inline")} ≈ ${r.calories_kcal} kcal · ${r.protein_g} g Protein pro Portion <span>(geschätzt)</span></p>` : ""}
         <p>${esc(r.description)}</p>
         <div class="tags">${r.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}</div>
         <div class="actions">
@@ -222,7 +227,7 @@ async function loadPlan() {
       <div class="emoji">${iconFor(r)}</div>
       <div class="info">
         <h3>${esc(r.title)}</h3>
-        <div class="meta">${icon("clock", "inline")} ${totalTime(r)} Min · ${fmtNum(r.servings * m)} Portionen</div>
+        <div class="meta">${icon("clock", "inline")} ${totalTime(r)} Min · ${fmtNum(r.servings * m)} Portionen${hasNutrition(r) ? ` · ≈ ${r.calories_kcal} kcal/Port.` : ""}</div>
       </div>
       <div class="stepper">
         <button data-d="-0.5" aria-label="Weniger Portionen">−</button>

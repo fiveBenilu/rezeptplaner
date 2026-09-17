@@ -40,9 +40,11 @@ SCHEMA = {
                     },
                     "steps": {"type": "array", "items": {"type": "string"}},
                     "tags": {"type": "array", "items": {"type": "string"}},
+                    "calories_kcal": {"type": "integer"},
+                    "protein_g": {"type": "integer"},
                 },
                 "required": ["title", "description", "cuisine", "servings", "prep_time_min",
-                             "cook_time_min", "ingredients", "steps", "tags"],
+                             "cook_time_min", "ingredients", "steps", "tags", "calories_kcal", "protein_g"],
             },
         }
     },
@@ -76,7 +78,9 @@ def build_prompt(p: dict) -> str:
         "Regeln: Alles auf Deutsch. Zutatennamen im Singular ohne Mengen im Namen (z.B. 'Zwiebel'). "
         "Einheiten nur aus: g, kg, ml, l, EL, TL, Stück, Prise, Bund, Zehe, Dose, Packung, Scheibe; "
         "amount null nur bei 'nach Geschmack'. Schritte klar und vollständig, ohne Nummerierung. "
-        "Tags kurz (z.B. 'schnell', 'vegetarisch'). Antworte ausschließlich mit den strukturierten Daten."
+        "Tags kurz (z.B. 'schnell', 'vegetarisch'). "
+        "calories_kcal und protein_g: realistische, grobe Schätzung pro Portion (nicht fürs ganze Rezept), "
+        "ganzzahlig und sinnvoll gerundet (z.B. 620 kcal, 34 g), keine Scheingenauigkeit. Antworte ausschließlich mit den strukturierten Daten."
     )
 
 
@@ -168,4 +172,7 @@ def clean_recipe(r) -> dict | None:
         "ingredients": ingredients,
         "steps": steps,
         "tags": [str(t).strip() for t in r.get("tags") or [] if str(t).strip()],
+        # Nährwerte sind nur eine Schätzung und optional: kaputt/fehlend -> None statt Rezept verwerfen.
+        "calories_kcal": _int(r.get("calories_kcal"), None),
+        "protein_g": _int(r.get("protein_g"), None),
     }
