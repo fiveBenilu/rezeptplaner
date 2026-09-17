@@ -29,6 +29,8 @@
 }
 
 * { box-sizing: border-box; }
+/* form/.btn setzen display, das würde das hidden-Attribut sonst überstimmen. */
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
@@ -110,6 +112,31 @@ textarea { resize: vertical; }
   position: absolute; top: 8px; right: 8px; min-width: 28px; height: 28px; border-radius: 99px;
   display: grid; place-items: center; background: var(--ok); color: #fff; font-size: 14px;
 }
+/* Suche & Filter */
+.filter { display: grid; gap: 8px; margin-bottom: 12px; }
+.search-row { grid-template-columns: 1fr auto; gap: 8px; }
+.search-row select { width: auto; }
+.chips { display: flex; gap: 8px; overflow-x: auto; margin: 0 -16px; padding: 0 16px 2px; scrollbar-width: none; }
+.chips::-webkit-scrollbar { display: none; }
+.chip {
+  flex: none; min-height: 44px; padding: 0 16px; border-radius: 99px; cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--line); background: var(--card); color: var(--text); font-size: 14px; font-weight: 500;
+}
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.empty .reset-filter { width: auto; margin-top: 8px; }
+
+/* Favoriten-Stern: 44px Touch-Fläche, sichtbarer Kreis wie das Eingeplant-Badge */
+.recipe .fav {
+  position: absolute; top: 0; left: 0; z-index: 1; width: 44px; height: 44px; padding: 0;
+  border: 0; background: none; cursor: pointer; display: grid; place-items: center; color: var(--muted);
+}
+.recipe .fav::before {
+  content: ""; position: absolute; inset: 8px; border-radius: 99px;
+  background: color-mix(in srgb, var(--card) 85%, transparent);
+}
+.recipe .fav .ico-svg { position: relative; width: 16px; height: 16px; }
+.fav.on, .fav-toggle.on { color: var(--accent); }
+
 .empty { text-align: center; color: var(--muted); padding: 40px 20px; grid-column: 1 / -1; }
 .empty .big { font-size: 48px; }
 
@@ -151,7 +178,10 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
   position: sticky; top: 0; background: var(--card); z-index: 1;
   display: flex; justify-content: flex-end; padding: 8px;
 }
-.close { width: 44px; height: 44px; border-radius: 99px; border: 0; background: var(--bg); font-size: 18px; cursor: pointer; }
+.sheet-head { gap: 8px; }
+.close, .head-btn { width: 44px; height: 44px; border-radius: 99px; border: 0; background: var(--bg); font-size: 18px; cursor: pointer; display: grid; place-items: center; color: var(--text); }
+.head-btn.on { color: var(--accent); }
+.head-btn .ico-svg { width: 20px; height: 20px; }
 .sheet { padding: 0 20px calc(24px + env(safe-area-inset-bottom)); }
 .sheet .hero { font-size: 56px; }
 .sheet h2 { margin: 4px 0 6px; font-size: 24px; line-height: 1.2; }
@@ -170,6 +200,21 @@ dialog::backdrop { background: rgba(0,0,0,.4); }
 .sheet .nutrition span { font-weight: 400; color: var(--muted); }
 .sheet .actions { display: grid; gap: 8px; margin-top: 16px; }
 .plan-toggle.on { background: var(--ok); color: #fff; }
+/* Bearbeitungsmodus: nutzt die normalen form/label/input-Stile */
+.edit-form { padding-top: 0; }
+.edit-form h3 { margin: 12px 0 0; }
+.edit-list { display: grid; gap: 8px; }
+.edit-ing { display: grid; grid-template-columns: minmax(0, 1fr) 4.5em 5.5em 44px; gap: 6px; }
+.edit-step { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 6px; align-items: start; }
+.edit-ing input { padding: 10px 8px; }
+.remove { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--line); background: var(--bg); color: var(--muted); cursor: pointer; display: grid; place-items: center; }
+.remove .ico-svg { width: 16px; height: 16px; }
+.edit-form .actions { margin-top: 4px; }
+
+/* Auto-Wochenplan */
+.btn-icon { display: inline-flex; margin-right: 8px; vertical-align: -2px; }
+.auto-form { margin-top: 12px; padding-top: 16px; }
+
 .link-danger { background: none; border: 0; color: var(--danger); min-height: 44px; cursor: pointer; }
 
 /* Tab-Bar */

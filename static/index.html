@@ -59,6 +59,18 @@
           <p class="hint" id="gen-status" role="status"></p>
         </form>
       </details>
+      <div id="recipe-filter" class="filter" hidden>
+        <div class="row search-row">
+          <input id="search" type="search" placeholder="Suchen: Titel, Tag, Küche" aria-label="Rezepte durchsuchen" autocomplete="off">
+          <select id="max-time" aria-label="Maximale Zeit">
+            <option value="">Zeit: egal</option>
+            <option value="15">bis 15 Min</option>
+            <option value="30">bis 30 Min</option>
+            <option value="60">bis 60 Min</option>
+          </select>
+        </div>
+        <div class="chips" id="chips" role="group" aria-label="Filter"></div>
+      </div>
       <div id="recipe-grid" class="grid"></div>
     </section>
 
@@ -66,6 +78,31 @@
     <section id="tab-plan" class="tab">
       <p class="sub" id="plan-week"></p>
       <div id="plan-list"></div>
+      <div id="auto-plan" hidden>
+        <button class="btn primary" id="auto-open" type="button"><span class="btn-icon" data-icon="sparkles"></span>Woche automatisch planen</button>
+        <form id="auto-form" class="card auto-form" hidden>
+          <div class="row">
+            <label>Anzahl Gerichte
+              <select name="count">
+                <option>1</option><option>2</option><option>3</option><option>4</option><option selected>5</option>
+                <option>6</option><option>7</option><option>8</option><option>9</option><option>10</option>
+              </select>
+            </label>
+            <label>Ernährung
+              <select name="diet">
+                <option value="">keine Einschränkung</option>
+                <option value="vegetarisch">vegetarisch</option>
+                <option value="vegan">vegan</option>
+              </select>
+            </label>
+          </div>
+          <label>Freier Wunsch
+            <textarea name="wish" rows="2" maxlength="500" placeholder="z.B. schnell, wenig Aufwand, viel Gemüse"></textarea>
+          </label>
+          <button class="btn primary" type="submit">Rezepte generieren &amp; einplanen</button>
+          <p class="hint" id="auto-status" role="status"></p>
+        </form>
+      </div>
       <button class="btn danger" id="new-week">Neue Woche starten</button>
     </section>
 

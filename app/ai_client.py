@@ -1,6 +1,7 @@
 """Rezept-Generierung über die lokal authentifizierte `claude` CLI (Print-Modus, strukturiertes JSON)."""
 import asyncio
 import json
+import math
 import os
 import tempfile
 
@@ -140,7 +141,7 @@ def parse_output(returncode: int, stdout: str, stderr: str) -> list[dict]:
 def _int(v, default=0):
     try:
         return max(0, int(v))
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return default
 
 
@@ -155,7 +156,7 @@ def clean_recipe(r) -> dict | None:
         amount = i.get("amount")
         ingredients.append({
             "name": str(i["name"]).strip(),
-            "amount": float(amount) if isinstance(amount, (int, float)) else None,
+            "amount": float(amount) if isinstance(amount, (int, float)) and math.isfinite(amount) else None,
             "unit": str(i.get("unit") or "").strip(),
             "category": i.get("category") if i.get("category") in CATEGORIES else None,
         })

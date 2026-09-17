@@ -5,7 +5,7 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Body, FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
@@ -62,6 +62,8 @@ def init_db():
         for col in ("calories_kcal", "protein_g"):
             if col not in cols:
                 conn.execute(f"ALTER TABLE recipes ADD COLUMN {col} INTEGER")
+        if "favorite" not in cols:
+            conn.execute("ALTER TABLE recipes ADD COLUMN favorite INTEGER NOT NULL DEFAULT 0")
 
 
 def current_week(conn) -> str:
@@ -85,6 +87,7 @@ def row_to_recipe(row) -> dict:
     r = dict(row)
     for f in ("ingredients", "steps", "tags"):
         r[f] = json.loads(r[f])
+    r["favorite"] = bool(r.get("favorite"))
     return r
 
 
@@ -140,27 +143,63 @@ class GenerateRequest(BaseModel):
     count: int = Field(5, ge=1, le=8)
 
 
-@app.post("/api/recipes/generate")
-async def generate(req: GenerateRequest):
-    prefs = req.model_dump()
+RECIPE_COLS = ("title", "description", "cuisine", "servings", "prep_time_min", "cook_time_min",
+               "ingredients", "steps", "tags", "calories_kcal", "protein_g")
+
+
+def recipe_values(r: dict) -> tuple:
+    return tuple(json.dumps(r[c], ensure_ascii=False) if c in ("ingredients", "steps", "tags") else r.get(c)
+                 for c in RECIPE_COLS)
+
+
+async def generate_and_store(prefs: dict) -> list[int]:
+    """KI-Rezepte generieren und speichern; liefert die neuen IDs. Gemeinsam für Generieren und Auto-Wochenplan."""
     with closing(db()) as conn:
         prefs["exclude_titles"] = [r["title"] for r in conn.execute("SELECT title FROM recipes ORDER BY id DESC LIMIT 40")]
     try:
         recipes = await ai_client.generate_recipes(prefs)
     except ai_client.AIError as e:
         raise HTTPException(503, str(e))
-
     with closing(db()) as conn, conn:
-        ids = []
-        for r in recipes:
-            cur = conn.execute(
-                "INSERT INTO recipes (title, description, cuisine, servings, prep_time_min, cook_time_min, "
-                "ingredients, steps, tags, calories_kcal, protein_g) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (r["title"], r["description"], r["cuisine"], r["servings"], r["prep_time_min"], r["cook_time_min"],
-                 json.dumps(r["ingredients"], ensure_ascii=False), json.dumps(r["steps"], ensure_ascii=False),
-                 json.dumps(r["tags"], ensure_ascii=False), r.get("calories_kcal"), r.get("protein_g")))
-            ids.append(cur.lastrowid)
+        return [conn.execute(f"INSERT INTO recipes ({', '.join(RECIPE_COLS)}) VALUES ({', '.join('?' * len(RECIPE_COLS))})",
+                             recipe_values(r)).lastrowid for r in recipes]
+
+
+@app.post("/api/recipes/generate")
+async def generate(req: GenerateRequest):
+    ids = await generate_and_store(req.model_dump())
+    with closing(db()) as conn:
         return [get_recipe(conn, i) for i in ids]
+
+
+@app.put("/api/recipes/{recipe_id}")
+def update_recipe(recipe_id: int, body: dict = Body(...)):
+    # Gleiche Normalisierung wie bei KI-Rezepten; Nicht-Listen vorher neutralisieren (sonst iteriert clean_recipe über Strings).
+    for f in ("ingredients", "steps", "tags"):
+        if not isinstance(body.get(f), list):
+            body[f] = []
+    r = ai_client.clean_recipe(body)
+    if not r:
+        if not str(body.get("title") or "").strip():
+            raise HTTPException(422, "Der Titel darf nicht leer sein.")
+        raise HTTPException(422, "Das Rezept braucht mindestens eine Zutat und einen Zubereitungsschritt.")
+    with closing(db()) as conn, conn:
+        get_recipe(conn, recipe_id)
+        conn.execute(f"UPDATE recipes SET {', '.join(c + ' = ?' for c in RECIPE_COLS)} WHERE id = ?",
+                     (*recipe_values(r), recipe_id))
+        return get_recipe(conn, recipe_id)
+
+
+class FavoriteEntry(BaseModel):
+    favorite: bool
+
+
+@app.put("/api/recipes/{recipe_id}/favorite")
+def set_favorite(recipe_id: int, entry: FavoriteEntry):
+    with closing(db()) as conn, conn:
+        get_recipe(conn, recipe_id)
+        conn.execute("UPDATE recipes SET favorite = ? WHERE id = ?", (int(entry.favorite), recipe_id))
+    return {"ok": True}
 
 
 # ---------- Wochenplan ----------
@@ -197,6 +236,22 @@ def unplan_recipe(recipe_id: int):
     with closing(db()) as conn, conn:
         conn.execute("DELETE FROM weekly_plan WHERE week_start = ? AND recipe_id = ?", (current_week(conn), recipe_id))
     return {"ok": True}
+
+
+class AutoPlanRequest(BaseModel):
+    count: int = Field(5, ge=1, le=10)
+    diet: str = Field("", pattern="^(|vegetarisch|vegan)$")
+    wish: str = Field("", max_length=500)
+
+
+@app.post("/api/plan/auto-generate")
+async def auto_plan(req: AutoPlanRequest):
+    ids = await generate_and_store(req.model_dump())
+    with closing(db()) as conn, conn:
+        week = current_week(conn)
+        conn.executemany("INSERT OR REPLACE INTO weekly_plan (week_start, recipe_id, multiplier) VALUES (?, ?, 1)",
+                         [(week, i) for i in ids])
+    return get_plan()
 
 
 @app.post("/api/plan/new-week")
